@@ -1,0 +1,288 @@
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.image.BufferedImage;
+import javax.swing.table.DefaultTableModel;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+import java.io.File;
+import java.io.IOException;
+
+public class RecipeStepSequencer {
+
+    private JFrame frame;
+    private CustomPanel startPanel, mainPanel;
+    private JTextField stepField, dependsOnField;
+    private JTextArea resultArea;
+    private JTable stepsTable;
+
+    public RecipeStepSequencer() {
+        frame = new JFrame("Recipe Step Sequencer");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(600, 650);
+        frame.setLayout(new CardLayout());
+        frame.setLocationRelativeTo(null);
+
+        startPanel = new CustomPanel("C:\\Pictures\\download3.jpeg");
+        startPanel.setLayout(new GridBagLayout());
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+
+        JLabel titleLabel = new JLabel("<html><div style='text-align: center;'>Recipe<br>Step<br>Sequencer</div></html>", JLabel.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 40));
+        titleLabel.setForeground(Color.BLACK);
+        titleLabel.setOpaque(false);
+        titleLabel.setBorder(BorderFactory.createLineBorder(Color.BLACK, 3));
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        startPanel.add(titleLabel, gbc);
+
+        JButton nextButton = new JButton("NEXT");
+        nextButton.setFont(new Font("Arial", Font.BOLD, 15));
+        nextButton.setFocusPainted(false);
+        nextButton.setForeground(Color.BLACK);
+        nextButton.setContentAreaFilled(false);
+        nextButton.setBorder(BorderFactory.createLineBorder(Color.BLACK, 3));
+        nextButton.setOpaque(false);
+
+        nextButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                showMainScreen();
+            }
+        });
+
+        gbc.gridy = 1;
+        startPanel.add(nextButton, gbc);
+
+        // Main panel setup
+        mainPanel = new CustomPanel("C:\\Pictures\\download2.jpeg");
+        mainPanel.setLayout(new GridBagLayout());
+        GridBagConstraints mainGbc = new GridBagConstraints();
+        mainGbc.fill = GridBagConstraints.HORIZONTAL;
+
+        JPanel inputPanel = new JPanel();
+        inputPanel.setLayout(new GridBagLayout());
+        inputPanel.setBackground(Color.LIGHT_GRAY);
+        inputPanel.setBorder(BorderFactory.createLineBorder(Color.BLACK, 0));
+
+        JLabel stepLabel = new JLabel("Step:");
+        stepLabel.setFont(new Font("Arial", Font.PLAIN, 18));
+        GridBagConstraints inputGbc = new GridBagConstraints();
+        inputGbc.gridx = 0;
+        inputGbc.gridy = 0;
+        inputPanel.add(stepLabel, inputGbc);
+
+        stepField = new JTextField(15);
+        inputGbc.gridx = 1;
+        inputPanel.add(stepField, inputGbc);
+
+        JLabel dependsOnLabel = new JLabel("Depends On:");
+        dependsOnLabel.setFont(new Font("Arial", Font.PLAIN, 18));
+        inputGbc.gridx = 0;
+        inputGbc.gridy = 1;
+        inputPanel.add(dependsOnLabel, inputGbc);
+
+        dependsOnField = new JTextField(15);
+        inputGbc.gridx = 1;
+        inputPanel.add(dependsOnField, inputGbc);
+
+        mainGbc.gridx = 0;
+        mainGbc.gridy = 0;
+        mainGbc.gridwidth = 3;
+        mainPanel.add(inputPanel, mainGbc);
+
+        JButton addButton = new JButton("Add Step");
+        addButton.setFont(new Font("Arial", Font.PLAIN, 16));
+        mainGbc.gridx = 0;
+        mainGbc.gridy = 1;
+        mainGbc.gridwidth = 1;
+        mainPanel.add(addButton, mainGbc);
+
+        addButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String step = stepField.getText();
+                String dependsOn = dependsOnField.getText();
+
+                if (step.isEmpty()) {
+                    JOptionPane.showMessageDialog(frame, "Please enter a step.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                if (dependsOn.isEmpty()) {
+                    dependsOn = "(none)";
+                }
+
+                DefaultTableModel model = (DefaultTableModel) stepsTable.getModel();
+                model.addRow(new Object[]{step, dependsOn});
+
+                stepField.setText("");
+                dependsOnField.setText("");
+            }
+        });
+
+        JButton sortButton = new JButton("Sort Steps");
+        sortButton.setFont(new Font("Arial", Font.PLAIN, 16));
+        mainGbc.gridx = 1;
+        mainGbc.gridy = 1;
+        mainGbc.weightx = 0;
+        mainPanel.add(sortButton, mainGbc);
+
+        sortButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    DefaultTableModel model = (DefaultTableModel) stepsTable.getModel();
+                    int rowCount = model.getRowCount();
+                    HashMap<String, List<String>> graph = new HashMap<>();
+                    HashMap<String, Integer> inDegree = new HashMap<>();
+
+                    for (int i = 0; i < rowCount; i++) {
+                        String step = (String) model.getValueAt(i, 0);
+                        String dependsOn = (String) model.getValueAt(i, 1);
+
+                        graph.putIfAbsent(step, new ArrayList<>());
+                        inDegree.putIfAbsent(step, 0);
+
+                        if (!dependsOn.equals("(none)")) {
+                            graph.putIfAbsent(dependsOn, new ArrayList<>());
+                            graph.get(dependsOn).add(step);
+                            inDegree.put(step, inDegree.getOrDefault(step, 0) + 1);
+                        }
+                    }
+
+                    List<String> sortedSteps = topologicalSort(graph, inDegree);
+                    if (sortedSteps == null) {
+                        resultArea.setText("Error: There is a circular dependency in the steps.");
+                    } else {
+                        resultArea.setText("Sorted Steps:\n");
+                        for (String step : sortedSteps) {
+                            resultArea.append(step + "\n");
+                        }
+                    }
+
+                } catch (Exception ex) {
+                    resultArea.setText("Error while sorting: " + ex.getMessage());
+                }
+            }
+        });
+
+        JButton resetButton = new JButton("Reset");
+        resetButton.setFont(new Font("Arial", Font.PLAIN, 16));
+        mainGbc.gridx = 2;
+        mainGbc.gridy = 1;
+        mainGbc.weightx = 0;
+        mainPanel.add(resetButton, mainGbc);
+
+        resetButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                stepField.setText("");
+                dependsOnField.setText("");
+
+                DefaultTableModel model = (DefaultTableModel) stepsTable.getModel();
+                model.setRowCount(0);
+
+                resultArea.setText("");
+            }
+        });
+
+        String[] columnNames = {"Step", "Depends On"};
+        DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0);
+        stepsTable = new JTable(tableModel);
+        stepsTable.setBackground(Color.LIGHT_GRAY);
+        stepsTable.setGridColor(Color.BLACK);
+        stepsTable.getColumnModel().getColumn(0).setPreferredWidth(300);
+        stepsTable.getColumnModel().getColumn(1).setPreferredWidth(200);
+        stepsTable.setRowHeight(25);
+
+        JScrollPane scrollPane = new JScrollPane(stepsTable);
+        mainGbc.gridx = 0;
+        mainGbc.gridy = 2;
+        mainGbc.gridwidth = 3;
+        mainPanel.add(scrollPane, mainGbc);
+
+        resultArea = new JTextArea(5, 30);
+        resultArea.setEditable(false);
+        resultArea.setBackground(Color.LIGHT_GRAY);
+        JScrollPane resultScrollPane = new JScrollPane(resultArea);
+        mainGbc.gridx = 0;
+        mainGbc.gridy = 3;
+        mainGbc.gridwidth = 3;
+        mainPanel.add(resultScrollPane, mainGbc);
+
+        frame.add(startPanel, "Start");
+        frame.add(mainPanel, "Main");
+        frame.setVisible(true);
+    }
+
+    private void showMainScreen() {
+        CardLayout cl = (CardLayout) frame.getContentPane().getLayout();
+        cl.show(frame.getContentPane(), "Main");
+    }
+
+    private List<String> topologicalSort(HashMap<String, List<String>> graph, HashMap<String, Integer> inDegree) {
+        List<String> sortedList = new ArrayList<>();
+        Queue<String> queue = new LinkedList<>();
+
+        // Start with nodes that have no incoming edges
+        for (String node : inDegree.keySet()) {
+            if (inDegree.get(node) == 0) {
+                queue.offer(node);
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            sortedList.add(current);
+
+            for (String neighbor : graph.getOrDefault(current, new ArrayList<>())) {
+                inDegree.put(neighbor, inDegree.get(neighbor) - 1);
+                if (inDegree.get(neighbor) == 0) {
+                    queue.offer(neighbor);
+                }
+            }
+        }
+
+        // Check for circular dependencies
+        if (sortedList.size() != inDegree.size()) {
+            return null; // Circular dependency detected
+        }
+
+        return sortedList;
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                new RecipeStepSequencer();
+            }
+        });
+    }
+
+    class CustomPanel extends JPanel {
+        private Image backgroundImage;
+
+        public CustomPanel(String imagePath) {
+            try {
+                BufferedImage img = ImageIO.read(new File(imagePath));
+                backgroundImage = img; // Store the original image without scaling
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (backgroundImage != null) {
+                // Draw the image stretched to fill the panel
+                g.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), null);
+            }
+        }
+    }
+}
